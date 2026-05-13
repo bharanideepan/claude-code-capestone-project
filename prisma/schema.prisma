@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  sessions     Session[]
+  repositories Repository[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Repository {
+  id            String     @id @default(cuid())
+  githubId      Int        @unique @map("github_id")
+  owner         String
+  name          String
+  fullName      String     @map("full_name")
+  description   String?
+  isPrivate     Boolean    @default(false) @map("is_private")
+  defaultBranch String     @default("main") @map("default_branch")
+  userId        String     @map("user_id")
+  lastSyncedAt  DateTime?  @map("last_synced_at")
+  syncStatus    SyncStatus @default(PENDING) @map("sync_status")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metrics Metric[]
+
+  @@unique([owner, name])
+  @@index([userId])
+  @@map("repositories")
+}
+
+model Metric {
+  id           String   @id @default(cuid())
+  repoId       String   @map("repo_id")
+  date         DateTime @db.Date
+  commits      Int      @default(0)
+  prsOpened    Int      @default(0) @map("prs_opened")
+  prsMerged    Int      @default(0) @map("prs_merged")
+  prsClosed    Int      @default(0) @map("prs_closed")
+  contributors Int      @default(0)
+  additions    Int      @default(0)
+  deletions    Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  repository Repository @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@unique([repoId, date])
+  @@index([repoId, date])
+  @@map("metrics")
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCING
+  SUCCESS
+  FAILED
+}

@@ -112,6 +112,27 @@ Session      — id, userId (FK), token, expiresAt
 
 ---
 
+## TDD Rule — Non-Negotiable
+
+**Write the test before writing the implementation. No exceptions.**
+
+The cycle for every function, API route, and component is:
+
+1. **Red** — write a failing test that describes the intended behaviour
+2. **Green** — write the minimum code to make it pass
+3. **Refactor** — clean up without breaking the test
+
+This applies at every layer:
+- `lib/` functions: test file first, implementation second
+- API routes: test the contract (request → response) before writing the handler
+- Components: test the render and interaction before writing JSX
+
+Do not open a PR where any new code lacks a corresponding test written before the implementation. If you are adding a function and there is no test for it, the function does not exist yet — write the test first.
+
+CI enforces ≥80% coverage and will block merges if it drops below threshold. Coverage is a floor, not a goal — every meaningful behaviour should be tested regardless of the percentage.
+
+---
+
 ## Testing Strategy
 
 ### Framework
