@@ -41,7 +41,7 @@ export async function POST(req: Request): Promise<Response> {
     if (err instanceof GitHubRepoNotFoundError) return errorResponse('Repository not found on GitHub', 404)
     if (err instanceof GitHubUnavailableError) return errorResponse('GitHub is currently unreachable', 502)
     if (err && typeof err === 'object' && 'status' in err) {
-      return errorResponse((err as { message: string }).message, (err as { status: number }).status)
+      return errorResponse(String((err as Record<string, unknown>).message), Number((err as Record<string, unknown>).status))
     }
     return errorResponse('Internal server error', 500)
   }

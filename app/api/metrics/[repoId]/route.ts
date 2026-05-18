@@ -46,7 +46,7 @@ export async function GET(req: Request, { params }: Params): Promise<Response> {
     return Response.json({ repoId, from, to, granularity, data })
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'status' in err) {
-      return errorResponse((err as { message: string }).message, (err as { status: number }).status)
+      return errorResponse(String((err as Record<string, unknown>).message), Number((err as Record<string, unknown>).status))
     }
     return errorResponse('Internal server error', 500)
   }
