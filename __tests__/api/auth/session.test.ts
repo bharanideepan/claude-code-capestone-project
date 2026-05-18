@@ -4,7 +4,7 @@ const mockSessionFindUnique = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    session: { findUnique: mockSessionFindUnique },
+    session: { findUnique: mockSessionFindUnique, update: vi.fn() },
   },
 }))
 

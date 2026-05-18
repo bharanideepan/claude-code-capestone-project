@@ -5,7 +5,7 @@ const mockSessionDelete = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    session: { findUnique: mockSessionFindUnique, delete: mockSessionDelete },
+    session: { findUnique: mockSessionFindUnique, delete: mockSessionDelete, update: vi.fn() },
   },
 }))
 

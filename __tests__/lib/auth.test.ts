@@ -132,6 +132,7 @@ describe('requireSession', () => {
             expiresAt: futureDate,
             user: { id: 'user-1', email: 'test@example.com' },
           }),
+          update: vi.fn().mockResolvedValue({}),
         },
       },
     }))
@@ -142,5 +143,35 @@ describe('requireSession', () => {
     const result = await requireSession(req)
     expect(result.session.token).toBe('valid-token')
     expect(result.user.email).toBe('test@example.com')
+  })
+
+  it('refreshes session expiry on each valid request (sliding expiry)', async () => {
+    const soonExpiring = new Date(Date.now() + 60_000)
+    const mockUpdate = vi.fn().mockResolvedValue({})
+    vi.doMock('@/lib/db', () => ({
+      prisma: {
+        session: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'sess-1',
+            userId: 'user-1',
+            token: 'valid-token',
+            expiresAt: soonExpiring,
+            user: { id: 'user-1', email: 'test@example.com' },
+          }),
+          update: mockUpdate,
+        },
+      },
+    }))
+    const { requireSession } = await import('@/lib/auth')
+    const req = new Request('http://localhost/api/test', {
+      headers: { Authorization: 'Bearer valid-token' },
+    })
+    await requireSession(req)
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { token: 'valid-token' },
+        data: expect.objectContaining({ expiresAt: expect.any(Date) }),
+      }),
+    )
   })
 })

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    session: { findUnique: mocks.sessionFindUnique },
+    session: { findUnique: mocks.sessionFindUnique, update: vi.fn() },
     repository: { findUnique: mocks.repoFindUnique, findMany: mocks.repoFindMany },
     metric: { findMany: mocks.metricFindMany },
   },

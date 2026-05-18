@@ -49,5 +49,11 @@ export const requireSession = async (req: Request): Promise<SessionData> => {
   if (!session) throw new ApiError(401, 'Invalid session token')
   if (isSessionExpired(session.expiresAt)) throw new ApiError(401, 'Session expired')
 
+  // Sliding expiry: refresh the 30-day window on every authenticated request
+  await prisma.session.update({
+    where: { token },
+    data: { expiresAt: createSessionExpiry() },
+  })
+
   return { session, user: session.user }
 }
