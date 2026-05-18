@@ -203,11 +203,55 @@ Any feature outside this boundary requires an explicit spec update before implem
 
 ---
 
+## MCP Integration
+
+### GitHub MCP Server
+
+DevPulse uses the GitHub MCP server for Claude Code to inspect, validate, and explore repository data during development.
+
+**Configuration** (`.mcp.json` — checked into the repo):
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+**Setup**: Set `GITHUB_TOKEN` in `.env` (a personal access token with `repo` scope). The MCP server picks it up via the `${GITHUB_TOKEN}` reference.
+
+### How MCP is Used
+
+| Context | Usage |
+|---|---|
+| **Development (Claude Code)** | GitHub MCP tools (`get_repository`, `list_commits`, `list_pull_requests`) used to explore real repo data while building features |
+| **Runtime (application)** | `lib/github.ts` calls the GitHub REST API directly using `GITHUB_TOKEN` — same data, framework-agnostic |
+
+### Runtime GitHub Integration (`lib/github.ts`)
+
+Three functions back the sync feature:
+
+| Function | GitHub API Endpoint | Used By |
+|---|---|---|
+| `getRepoInfo(owner, name)` | `GET /repos/{owner}/{name}` | `POST /api/repos/connect` |
+| `fetchCommitsByDateRange(owner, name, branch, from, to)` | `GET /repos/{owner}/{name}/commits` | `POST /api/repos/[repoId]/sync` |
+| `fetchPRsByDateRange(owner, name, from, to)` | `GET /repos/{owner}/{name}/pulls` | `POST /api/repos/[repoId]/sync` |
+
+Error classes: `GitHubRepoNotFoundError` → 404, `GitHubRateLimitError` → 429 + `Retry-After`, `GitHubUnavailableError` → 502.
+
+---
+
 ## Environment Variables
 
 ```env
 DATABASE_URL=          # PostgreSQL connection string
-GITHUB_TOKEN=          # GitHub personal access token (for MCP server)
+GITHUB_TOKEN=          # GitHub personal access token (repo scope, used by MCP + runtime API)
 SESSION_SECRET=        # Secret for signing session tokens (min 32 chars)
 NEXT_PUBLIC_APP_URL=   # Base URL (used for OAuth redirects if added later)
 ```
