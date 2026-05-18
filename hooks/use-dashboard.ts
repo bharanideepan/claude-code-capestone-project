@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { getSessionToken } from '@/lib/session-cookie'
 
 type MetricRow = {
@@ -47,57 +47,62 @@ export function useDashboard(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const token = getSessionToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const params = new URLSearchParams({ from, to })
-
-      if (repoId) {
-        const res = await fetch(`/api/metrics/${repoId}?${params}&granularity=day`, { headers })
-        if (!res.ok) {
-          const d = await res.json()
-          setError(d.error ?? 'Failed to load metrics')
-          return
-        }
-        const data = await res.json()
-        setMetrics(data.data)
-        const t = (data.data as MetricRow[]).reduce(
-          (acc, m) => ({
-            commits: acc.commits + m.commits,
-            prsOpened: acc.prsOpened + m.prsOpened,
-            prsMerged: acc.prsMerged + m.prsMerged,
-            contributors: acc.contributors + m.contributors,
-            additions: acc.additions + m.additions,
-            deletions: acc.deletions + m.deletions,
-          }),
-          { ...EMPTY_TOTALS },
-        )
-        setTotals(t)
-      } else {
-        const res = await fetch(`/api/dashboard/summary?${params}`, { headers })
-        if (!res.ok) {
-          const d = await res.json()
-          setError(d.error ?? 'Failed to load summary')
-          return
-        }
-        const data = await res.json()
-        setTotals(data.totals)
-        setMetrics([])
-      }
-    } catch {
-      setError('Network error')
-    } finally {
-      setLoading(false)
-    }
-  }, [repoId, from, to])
-
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    let active = true
+
+    async function fetchData() {
+      setLoading(true)
+      setError(null)
+      try {
+        const token = getSessionToken()
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const params = new URLSearchParams({ from, to })
+
+        if (repoId) {
+          const res = await fetch(`/api/metrics/${repoId}?${params}&granularity=day`, { headers })
+          if (!active) return
+          if (!res.ok) {
+            const d = await res.json()
+            setError(d.error ?? 'Failed to load metrics')
+            return
+          }
+          const data = await res.json()
+          const t = (data.data as MetricRow[]).reduce(
+            (acc, m) => ({
+              commits: acc.commits + m.commits,
+              prsOpened: acc.prsOpened + m.prsOpened,
+              prsMerged: acc.prsMerged + m.prsMerged,
+              contributors: acc.contributors + m.contributors,
+              additions: acc.additions + m.additions,
+              deletions: acc.deletions + m.deletions,
+            }),
+            { ...EMPTY_TOTALS },
+          )
+          setMetrics(data.data)
+          setTotals(t)
+        } else {
+          const res = await fetch(`/api/dashboard/summary?${params}`, { headers })
+          if (!active) return
+          if (!res.ok) {
+            const d = await res.json()
+            setError(d.error ?? 'Failed to load summary')
+            return
+          }
+          const data = await res.json()
+          setTotals(data.totals)
+          setMetrics([])
+        }
+      } catch {
+        if (active) setError('Network error')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void fetchData()
+    return () => { active = false }
+  }, [repoId, from, to])
 
   return { totals, metrics, loading, error }
 }

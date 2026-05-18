@@ -20,7 +20,7 @@ type SettingsContentProps = {
 }
 
 export function SettingsContent({ initialRepos }: SettingsContentProps) {
-  const [repos, setRepos] = useState(initialRepos)
+  const [repos] = useState(initialRepos)
 
   function handleConnected() {
     // Refresh by reloading — full page refresh to get updated list from server
