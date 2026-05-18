@@ -4,7 +4,7 @@
 
 DevPulse is a developer analytics dashboard that connects to GitHub repositories and surfaces commit frequency, pull request stats, and team activity over time. It is designed as an internal tool for engineering teams who want visibility into their own development patterns without leaving their workflow.
 
-The application fetches repository data via the GitHub MCP server, stores aggregated metrics in PostgreSQL, and renders them through an interactive React dashboard.
+The application fetches repository data via the GitHub REST API, stores aggregated metrics in PostgreSQL, and renders them through an interactive React dashboard.
 
 ---
 
@@ -27,10 +27,13 @@ devpulse/
 │   ├── dashboard/              # MetricsSummary, ActivityFeed, RepoSelector
 │   └── layout/                 # Navbar, Sidebar, PageWrapper
 ├── lib/                        # Server-side utilities
+│   ├── auth.ts                 # Session helpers, password hashing (bcrypt + crypto)
+│   ├── config.ts               # Environment variable validation (required() helpers)
 │   ├── db.ts                   # Prisma client singleton
-│   ├── auth.ts                 # Session helpers, password hashing
-│   ├── github.ts               # GitHub MCP client wrapper
-│   └── metrics.ts              # Aggregation logic
+│   ├── github.ts               # GitHub REST API client (getRepoInfo, fetchCommits, fetchPRs)
+│   ├── rate-limit.ts           # Sliding-window in-process rate limiter
+│   ├── server-session.ts       # Server-side session helpers
+│   └── session-cookie.ts       # Client-side session token helpers
 ├── prisma/
 │   ├── schema.prisma
 │   └── migrations/
@@ -44,20 +47,26 @@ devpulse/
 
 ### Data Flow
 
-1. User connects a GitHub repo via the UI.
-2. API route calls the GitHub MCP server to fetch repo data.
-3. Metrics are aggregated and persisted in PostgreSQL via Prisma.
-4. Dashboard queries the DB (not GitHub directly) for all chart data.
-5. Background refresh re-syncs metrics on a configurable interval.
+1. User connects a GitHub repo via the UI → `POST /api/repos/connect`.
+2. Route validates input with Zod, calls `lib/github.ts → getRepoInfo()`, persists the repo record with `syncStatus: PENDING`.
+3. `POST /api/repos/[repoId]/sync` fetches commits and PRs (90-day window or since `lastSyncedAt`) and upserts daily `Metric` rows.
+4. Dashboard and metrics routes query the DB — never GitHub directly at render time.
 
 ### Database Schema (Prisma)
 
 ```
-User         — id, email, passwordHash, createdAt
-Repository   — id, githubId, owner, name, userId (FK), lastSyncedAt
-Metric       — id, repoId (FK), date, commits, prsOpened, prsMerged, contributors
-Session      — id, userId (FK), token, expiresAt
+User         — id, email, passwordHash, createdAt, updatedAt
+Session      — id, userId (FK), token (unique), expiresAt, ipAddress, userAgent
+Repository   — id, githubId (unique), owner, name, fullName, description,
+               isPrivate, defaultBranch, userId (FK), syncStatus, lastSyncedAt
+Metric       — id, repoId (FK), date (Date), commits, prsOpened, prsMerged,
+               prsClosed, contributors, additions, deletions
+               UNIQUE (repoId, date)
 ```
+
+`syncStatus` enum: `PENDING | SYNCING | SUCCESS | FAILED`
+
+Sessions use a **sliding 30-day expiry** — `requireSession()` resets `expiresAt` on every authenticated request.
 
 ---
 
@@ -109,6 +118,15 @@ Session      — id, userId (FK), token, expiresAt
 - API routes return `{ error: string }` with the appropriate HTTP status on failure.
 - Never expose stack traces or internal Prisma errors to the client.
 - Use Zod for all request body validation at the API boundary.
+- Use the shared `errorResponse(message, status)` helper from `types/index.ts`.
+
+### Security Patterns
+
+- **Authentication:** `requireSession(req)` in `lib/auth.ts` — reads `Authorization: Bearer <token>`, validates against DB, refreshes expiry.
+- **Rate limiting:** `checkRateLimit(key, max, windowMs)` in `lib/rate-limit.ts` — sliding-window, keyed by IP. Applied to `/login` (10/15 min) and `/register` (5/hr).
+- **Ownership checks:** Every repo and metrics route verifies `repo.userId === user.id` before operating.
+- **Input validation:** All repo owner/name fields validated against GitHub's naming rules via regex in `connectRepoSchema`.
+- **GitHub errors:** Three typed error classes (`GitHubRepoNotFoundError`, `GitHubRateLimitError`, `GitHubUnavailableError`) map to 404, 429, and 502 respectively.
 
 ---
 
@@ -146,8 +164,8 @@ CI enforces ≥80% coverage and will block merges if it drops below threshold. C
 
 | Layer | What to test | What NOT to test |
 |---|---|---|
-| `lib/metrics.ts` | Aggregation logic, edge cases (empty data, single commit) | Prisma internals |
-| `lib/auth.ts` | Password hashing, token generation, session expiry | bcrypt implementation |
+| `lib/auth.ts` | Password hashing, token generation, session expiry, `requireSession` | bcrypt implementation |
+| `lib/github.ts` | Each function's happy path, 404/429/502 error handling | GitHub API internals |
 | API routes | Request validation, happy path, auth guard, error response shape | DB internals |
 | Components | Render with props, user interactions, loading/error states | Tailwind class names |
 | Hooks | State transitions, returned values | React internals |
@@ -252,8 +270,12 @@ Error classes: `GitHubRepoNotFoundError` → 404, `GitHubRateLimitError` → 429
 ```env
 DATABASE_URL=          # PostgreSQL connection string
 GITHUB_TOKEN=          # GitHub personal access token (repo scope, used by MCP + runtime API)
-SESSION_SECRET=        # Secret for signing session tokens (min 32 chars)
+SESSION_SECRET=        # Arbitrary string — validated present by lib/config.ts (min 32 chars recommended)
 NEXT_PUBLIC_APP_URL=   # Base URL (used for OAuth redirects if added later)
 ```
 
-Never commit `.env` to version control. Use `.env.example` with placeholder values.
+- `DATABASE_URL` and `SESSION_SECRET` are **required at startup** — `lib/config.ts` throws if either is missing.
+- `GITHUB_TOKEN` is optional at startup but sync will fail without it.
+- Never commit `.env` to version control. Use `.env.example` with placeholder values.
+
+Generate a session secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
