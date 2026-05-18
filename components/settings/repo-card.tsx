@@ -86,7 +86,7 @@ export function RepoCard({ repo, onDisconnect, onSynced }: RepoCardProps) {
           )}
           {repo.lastSyncedAt && (
             <p className="text-xs text-slate-400">
-              Last synced: {new Date(repo.lastSyncedAt).toLocaleString()}
+              Last synced: {new Date(repo.lastSyncedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC
             </p>
           )}
           {syncError && <p className="text-xs text-red-600">{syncError}</p>}

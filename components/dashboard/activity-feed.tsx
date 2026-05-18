@@ -50,16 +50,18 @@ export function ActivityFeed({ range, onRangeChange }: ActivityFeedProps) {
         <input
           type="date"
           value={range.from}
+          max={range.to}
           onChange={handleFromChange}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           aria-label="From date"
         />
         <span className="text-slate-400">–</span>
         <input
           type="date"
           value={range.to}
+          min={range.from}
           onChange={handleToChange}
-          className="rounded-md border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           aria-label="To date"
         />
       </div>

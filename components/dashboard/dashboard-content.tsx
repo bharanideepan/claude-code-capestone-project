@@ -27,7 +27,7 @@ export function DashboardContent() {
   const [range, setRange] = useState(defaultRange)
 
   const { repos, loading: reposLoading } = useRepos()
-  const { totals, metrics, loading: metricsLoading } = useDashboard(
+  const { totals, metrics, loading: metricsLoading, error: metricsError } = useDashboard(
     selectedRepoId,
     range.from,
     range.to,
@@ -47,6 +47,10 @@ export function DashboardContent() {
         {loading ? (
           <div className="flex h-64 items-center justify-center text-sm text-slate-400">
             Loading…
+          </div>
+        ) : metricsError ? (
+          <div className="flex h-64 items-center justify-center text-sm text-red-500">
+            {metricsError}
           </div>
         ) : (
           <div className="flex flex-col gap-6">
