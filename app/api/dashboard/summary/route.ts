@@ -15,6 +15,10 @@ export async function GET(req: Request): Promise<Response> {
 
     const { from, to } = parsed.data
 
+    if (new Date(from) > new Date(to)) return errorResponse('from must be before to', 400)
+    const diffDays = (new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)
+    if (diffDays > 365) return errorResponse('Date range cannot exceed 365 days', 400)
+
     const repos = await prisma.repository.findMany({
       where: { userId: user.id },
       select: { id: true, fullName: true },
