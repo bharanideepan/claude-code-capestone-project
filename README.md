@@ -1,4 +1,4 @@
-# DevPulse
+# DevPulse - sample edited
 
 Developer analytics dashboard that surfaces commit frequency, pull request stats, and team activity across GitHub repositories. Built for engineering teams who want visibility into their own development patterns without leaving their workflow.
 
