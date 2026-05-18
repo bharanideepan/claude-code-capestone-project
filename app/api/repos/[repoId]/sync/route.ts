@@ -12,14 +12,26 @@ import { SyncStatus } from '@prisma/client'
 type Params = { params: Promise<{ repoId: string }> }
 
 export async function POST(req: Request, { params }: Params): Promise<Response> {
+  const { repoId } = await params
+
+  // Auth and ownership checks — errors here return before any repo state change
+  let userId: string
   try {
     const { user } = await requireSession(req)
-    const { repoId } = await params
+    userId = user.id
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'status' in err) {
+      return errorResponse(String((err as Record<string, unknown>).message), Number((err as Record<string, unknown>).status))
+    }
+    return errorResponse('Unauthorized', 401)
+  }
 
-    const repo = await prisma.repository.findUnique({ where: { id: repoId } })
-    if (!repo) return errorResponse('Repository not found', 404)
-    if (repo.userId !== user.id) return errorResponse('Forbidden', 403)
+  const repo = await prisma.repository.findUnique({ where: { id: repoId } })
+  if (!repo) return errorResponse('Repository not found', 404)
+  if (repo.userId !== userId) return errorResponse('Forbidden', 403)
 
+  // From here we own the repo — mark SYNCING and handle GitHub errors
+  try {
     await prisma.repository.update({ where: { id: repoId }, data: { syncStatus: SyncStatus.SYNCING } })
 
     const ninetyDaysAgo = new Date()
@@ -51,7 +63,7 @@ export async function POST(req: Request, { params }: Params): Promise<Response> 
     return Response.json({ repository: updated })
   } catch (err: unknown) {
     await prisma.repository.update({
-      where: { id: (await params).repoId },
+      where: { id: repoId },
       data: { syncStatus: SyncStatus.FAILED },
     }).catch(() => {})
 
@@ -62,9 +74,6 @@ export async function POST(req: Request, { params }: Params): Promise<Response> 
       })
     }
     if (err instanceof GitHubUnavailableError) return errorResponse('GitHub is currently unreachable', 502)
-    if (err && typeof err === 'object' && 'status' in err) {
-      return errorResponse(String((err as Record<string, unknown>).message), Number((err as Record<string, unknown>).status))
-    }
     return errorResponse('Internal server error', 500)
   }
 }

@@ -133,6 +133,49 @@ describe('POST /api/repos/connect', () => {
     const res = await POST(req)
     expect(res.status).toBe(404)
   })
+
+  it('returns 201 with the created repository on success', async () => {
+    const { getRepoInfo } = await import('@/lib/github')
+    mockSessionFindUnique.mockResolvedValue(validSession)
+    mockRepoFindUnique.mockResolvedValue(null)
+    vi.mocked(getRepoInfo).mockResolvedValue({
+      githubId: 12345,
+      owner: 'octocat',
+      name: 'hello-world',
+      fullName: 'octocat/hello-world',
+      description: 'My first repo',
+      isPrivate: false,
+      defaultBranch: 'main',
+    })
+    mockRepoCreate.mockResolvedValue({ id: 'repo-1', fullName: 'octocat/hello-world', syncStatus: 'PENDING' })
+
+    const { POST } = await import('@/app/api/repos/connect/route')
+    const req = new Request('http://localhost/api/repos/connect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: 'octocat', name: 'hello-world' }),
+    })
+    const res = await POST(req)
+    const json = await res.json()
+    expect(res.status).toBe(201)
+    expect(json.repository.fullName).toBe('octocat/hello-world')
+  })
+
+  it('returns 502 when GitHub is unreachable', async () => {
+    const { getRepoInfo, GitHubUnavailableError } = await import('@/lib/github')
+    mockSessionFindUnique.mockResolvedValue(validSession)
+    mockRepoFindUnique.mockResolvedValue(null)
+    vi.mocked(getRepoInfo).mockRejectedValue(new GitHubUnavailableError('unreachable'))
+
+    const { POST } = await import('@/app/api/repos/connect/route')
+    const req = new Request('http://localhost/api/repos/connect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: 'octocat', name: 'hello-world' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(502)
+  })
 })
 
 // ── DELETE /api/repos/[repoId] ───────────────────────────────────────────────

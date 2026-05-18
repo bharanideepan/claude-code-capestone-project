@@ -93,6 +93,24 @@ describe('fetchCommitsByDateRange', () => {
     const result = await fetchCommitsByDateRange('octocat', 'empty', 'main', '2026-04-01', '2026-04-30')
     expect(result).toEqual([])
   })
+
+  it('throws GitHubRateLimitError on 429', async () => {
+    const res = new Response(JSON.stringify({ message: 'rate limit' }), {
+      status: 429,
+      headers: { 'Retry-After': '45' },
+    })
+    mockFetch.mockResolvedValue(res)
+    const err = await fetchCommitsByDateRange('octocat', 'hello-world', 'main', '2026-04-01', '2026-04-30').catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubRateLimitError)
+    expect((err as GitHubRateLimitError).retryAfter).toBe(45)
+  })
+
+  it('throws GitHubUnavailableError on unexpected non-ok status', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ message: 'Bad Gateway' }, 502))
+    await expect(
+      fetchCommitsByDateRange('octocat', 'hello-world', 'main', '2026-04-01', '2026-04-30'),
+    ).rejects.toBeInstanceOf(GitHubUnavailableError)
+  })
 })
 
 describe('fetchPRsByDateRange', () => {
@@ -115,5 +133,23 @@ describe('fetchPRsByDateRange', () => {
     mockFetch.mockResolvedValue(jsonResponse([]))
     const result = await fetchPRsByDateRange('octocat', 'hello-world', '2026-04-01', '2026-04-30')
     expect(result).toEqual([])
+  })
+
+  it('throws GitHubRateLimitError on 429', async () => {
+    const res = new Response(JSON.stringify({ message: 'rate limit' }), {
+      status: 429,
+      headers: { 'Retry-After': '30' },
+    })
+    mockFetch.mockResolvedValue(res)
+    const err = await fetchPRsByDateRange('octocat', 'hello-world', '2026-04-01', '2026-04-30').catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubRateLimitError)
+    expect((err as GitHubRateLimitError).retryAfter).toBe(30)
+  })
+
+  it('throws GitHubUnavailableError on unexpected non-ok status', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ message: 'Bad Gateway' }, 502))
+    await expect(
+      fetchPRsByDateRange('octocat', 'hello-world', '2026-04-01', '2026-04-30'),
+    ).rejects.toBeInstanceOf(GitHubUnavailableError)
   })
 })
